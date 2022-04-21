@@ -1,8 +1,14 @@
 import {
   TASK_COMPILE,
   TASK_COMPILE_SOLIDITY_COMPILE_JOB,
+  TASK_COMPILE_SOLIDITY_FILTER_COMPILATION_JOBS,
+  TASK_COMPILE_SOLIDITY_GET_COMPILATION_JOBS,
   TASK_COMPILE_SOLIDITY_GET_COMPILATION_JOB_FOR_FILE,
   TASK_COMPILE_SOLIDITY_GET_DEPENDENCY_GRAPH,
+  TASK_COMPILE_SOLIDITY_GET_SOURCE_NAMES,
+  TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS,
+  TASK_COMPILE_SOLIDITY_HANDLE_COMPILATION_JOBS_FAILURES,
+  TASK_COMPILE_SOLIDITY_MERGE_COMPILATION_JOBS,
 } from "hardhat/builtin-tasks/task-names";
 import { extendConfig, subtask, task, types } from "hardhat/config";
 import { NomicLabsHardhatPluginError } from "hardhat/plugins";
@@ -10,6 +16,7 @@ import {
   ActionType,
   Artifacts,
   CompilationJob,
+  CompilationJobsCreationResult,
   CompilerInput,
   CompilerOutput,
   DependencyGraph,
@@ -33,6 +40,7 @@ import {
   TASK_VERIFY_GET_ETHERSCAN_ENDPOINT,
   TASK_VERIFY_GET_LIBRARIES,
   TASK_VERIFY_GET_MINIMUM_BUILD,
+  TASK_VERIFY_GET_FULL_BUILD,
   TASK_VERIFY_VERIFY,
   TASK_VERIFY_VERIFY_MINIMUM_BUILD,
 } from "./constants";
@@ -274,9 +282,17 @@ Possible causes are:
     ? contractInformation.solcVersion
     : await getLongVersion(contractInformation.solcVersion);
 
-  const minimumBuild: Build = await run(TASK_VERIFY_GET_MINIMUM_BUILD, {
-    sourceName: contractInformation.sourceName,
-  });
+  let minimumBuild: Build;
+  try {
+    minimumBuild = await run(TASK_VERIFY_GET_MINIMUM_BUILD, {
+      sourceName: contractInformation.sourceName,
+    });
+  } catch (error) {
+    console.warn('Unable to produce minimum build, proceeding to use full build...')
+    minimumBuild = await run(TASK_VERIFY_GET_FULL_BUILD, {
+      sourceName: contractInformation.sourceName,
+    });
+  }
 
   const success: boolean = await run(TASK_VERIFY_VERIFY_MINIMUM_BUILD, {
     minimumBuild,
@@ -513,7 +529,74 @@ const getMinimumBuild: ActionType<MinimumBuildArgs> = async function (
     emitsArtifacts: false,
     quiet: true,
   });
+  return build;
+};
 
+const getFullBuild: ActionType<MinimumBuildArgs> = async function (
+  { sourceName },
+  { run }
+): Promise<Build> {
+  const sourcePaths: string[] = await run(
+    TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS
+  );
+
+  const sourceNames: string[] = await run(
+    TASK_COMPILE_SOLIDITY_GET_SOURCE_NAMES,
+    {
+      sourcePaths,
+    }
+  );
+
+  const dependencyGraph: DependencyGraph = await run(
+    TASK_COMPILE_SOLIDITY_GET_DEPENDENCY_GRAPH,
+    { sourceNames }
+  );
+
+  const resolvedFiles = dependencyGraph
+    .getResolvedFiles()
+    .filter((resolvedFile) => {
+      return resolvedFile.sourceName === sourceName;
+    });
+  assertHardhatPluginInvariant(
+    resolvedFiles.length === 1,
+    `The plugin found an unexpected number of files for this contract.`
+  );
+
+  const compilationJobsCreationResult: CompilationJobsCreationResult =
+    await run(TASK_COMPILE_SOLIDITY_GET_COMPILATION_JOBS, {
+      dependencyGraph,
+    });
+  await run(TASK_COMPILE_SOLIDITY_HANDLE_COMPILATION_JOBS_FAILURES, {
+    compilationJobsCreationErrors: compilationJobsCreationResult.errors,
+  });
+
+  const compilationJobs = compilationJobsCreationResult.jobs;
+
+  // const filteredCompilationJobs: CompilationJob[] = await run(
+  //   TASK_COMPILE_SOLIDITY_FILTER_COMPILATION_JOBS,
+  //   { compilationJobs, force: false }
+  // );
+
+  const mergedCompilationJobs: CompilationJob[] = await run(
+    TASK_COMPILE_SOLIDITY_MERGE_COMPILATION_JOBS,
+    { compilationJobs: compilationJobs }
+  );
+
+  const targetCompilationJobs = mergedCompilationJobs.filter((cj) => {
+    return (
+      cj.getResolvedFiles().filter((f) => f.sourceName === sourceName).length >
+      0
+    );
+  });
+  const compilationJob = targetCompilationJobs[0];
+
+  const build: Build = await run(TASK_COMPILE_SOLIDITY_COMPILE_JOB, {
+    compilationJob,
+    compilationJobs: [compilationJob],
+    compilationJobIndex: 0,
+    emitsArtifacts: false,
+    quiet: true,
+  });
   return build;
 };
 
@@ -782,6 +865,10 @@ This means that unrelated contracts may be displayed on Etherscan...
 subtask(TASK_VERIFY_GET_MINIMUM_BUILD)
   .addParam("sourceName", undefined, undefined, types.string)
   .setAction(getMinimumBuild);
+
+subtask(TASK_VERIFY_GET_FULL_BUILD)
+  .addParam("sourceName", undefined, undefined, types.string)
+  .setAction(getFullBuild);
 
 task(TASK_VERIFY, "Verifies contract on Etherscan")
   .addPositionalParam("address", "Address of the smart contract to verify")
