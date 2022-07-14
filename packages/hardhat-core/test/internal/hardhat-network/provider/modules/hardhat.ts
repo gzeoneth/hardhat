@@ -7,6 +7,7 @@ import sinon from "sinon";
 import { describe } from "mocha";
 import {
   numberToRpcQuantity,
+  numberToRpcStorageSlot,
   rpcQuantityToBN,
   rpcQuantityToNumber,
 } from "../../../../../src/internal/core/jsonrpc/types/base-types";
@@ -121,6 +122,10 @@ describe("Hardhat module", function () {
         it("lets you deploy a contract from an impersonated account", async function () {
           const impersonatedAddress =
             "0xC014BA5EC014ba5ec014Ba5EC014ba5Ec014bA5E";
+
+          await this.provider.send("hardhat_setNextBlockBaseFeePerGas", [
+            "0x0",
+          ]);
 
           await this.provider.send("eth_sendTransaction", [
             {
@@ -858,6 +863,43 @@ describe("Hardhat module", function () {
           });
         });
 
+        describe("base fee per gas", function () {
+          const getBlockBaseFeePerGas = async (block: number): Promise<BN> => {
+            return rpcQuantityToBN(
+              (
+                await this.ctx.provider.send("eth_getBlockByNumber", [
+                  numberToRpcQuantity(block),
+                  false,
+                ])
+              ).baseFeePerGas
+            );
+          };
+
+          it("shouldn't increase if the blocks are empty", async function () {
+            // the main reason for this test is that solidity-coverage sets the
+            // initial base fee per gas to 1, and hardhat_mine shouldn't mess
+            // with that
+
+            const originalLatestBlockNumber = await getLatestBlockNumber();
+
+            await this.provider.send("hardhat_setNextBlockBaseFeePerGas", [
+              numberToRpcQuantity(1),
+            ]);
+
+            const blocksToMine = 20;
+            await this.provider.send("hardhat_mine", [
+              numberToRpcQuantity(blocksToMine),
+            ]);
+
+            for (let i = 1; i <= blocksToMine; i++) {
+              const blockBaseFeePerGas = await getBlockBaseFeePerGas(
+                originalLatestBlockNumber + i
+              );
+              assert.isTrue(blockBaseFeePerGas.eqn(1));
+            }
+          });
+        });
+
         it("should mine transactions in the mempool", async function () {
           // Arrange: put some transactions into the mempool and
           // set the block gas limit so that only 3 txs are mined per block
@@ -1275,7 +1317,8 @@ describe("Hardhat module", function () {
             });
           });
 
-          afterEach(() => {
+          afterEach(async function () {
+            await this.provider.send("evm_setIntervalMining", [0]);
             sinonClock.restore();
           });
 
@@ -2031,7 +2074,7 @@ describe("Hardhat module", function () {
 
           const resultingStorageValue = await this.provider.send(
             "eth_getStorageAt",
-            [DEFAULT_ACCOUNTS_ADDRESSES[0], numberToRpcQuantity(0), "latest"]
+            [DEFAULT_ACCOUNTS_ADDRESSES[0], numberToRpcStorageSlot(0), "latest"]
           );
 
           assert.equal(resultingStorageValue, targetStorageValue);
@@ -2132,7 +2175,7 @@ describe("Hardhat module", function () {
           assert.equal(
             await this.provider.send("eth_getStorageAt", [
               DEFAULT_ACCOUNTS_ADDRESSES[0],
-              numberToRpcQuantity(0),
+              numberToRpcStorageSlot(0),
               currentBlockNumber,
             ]),
             targetStorageValue
