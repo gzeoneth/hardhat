@@ -304,7 +304,7 @@ export class ForkBlockchain
           continue;
         } else {
           throw new InternalError(
-            `Unknown transaction type ${transaction.type.toString()}`
+            `Unknown transaction type ${transaction.type.toString()}, set --fork-ignore-unknown-tx-type true to ignore`
           );
         }
       }
