@@ -346,7 +346,6 @@ task(TASK_NODE, "Starts a JSON-RPC server on top of Hardhat Network")
           hostname,
           port,
           provider,
-          forkIgnoreUnknownTxType,
         });
 
         await run(TASK_NODE_SERVER_CREATED, {
