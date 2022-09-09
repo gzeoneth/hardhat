@@ -68,6 +68,8 @@ function getSigners() => Promise<ethers.Signer[]>;
 
 function getSigner(address: string) => Promise<ethers.Signer>;
 
+function getImpersonatedSigner(address: string) => Promise<ethers.Signer>;
+
 function getContractFactoryFromArtifact(artifact: Artifact, signer?: ethers.Signer): Promise<ethers.ContractFactory>;
 
 function getContractFactoryFromArtifact(artifact: Artifact, factoryOptions: FactoryOptions): Promise<ethers.ContractFactory>;
@@ -78,6 +80,8 @@ function getContractAtFromArtifact(artifact: Artifact, address: string, signer?:
 The [`Contract`s](https://docs.ethers.io/v5/single-page/#/v5/api/contract/contract/) and [`ContractFactory`s](https://docs.ethers.io/v5/single-page/#/v5/api/contract/contract-factory/) returned by these helpers are connected to the first [signer](https://docs.ethers.io/v5/single-page/#/v5/api/signer/) returned by `getSigners` by default.
 
 If there is no signer available, `getContractAt` returns [read-only](https://docs.ethers.io/v5/single-page/#/v5/api/contract/contract/-%23-Contract--readonly) contracts.
+
+If the address provided to `getContractAt` is not the address of a contract account, an error will be thrown.
 
 ## Usage
 
