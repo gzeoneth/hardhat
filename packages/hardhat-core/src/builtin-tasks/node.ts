@@ -151,12 +151,10 @@ subtask(TASK_NODE_GET_PROVIDER)
       }
 
       // if the url or the block is different to the one in the configuration,
-      // or the ignoreUnknownTxType is different to the one in the configuration,
       // we use hardhat_reset to set the fork
       if (
         forkUrl !== forkUrlConfig ||
-        forkBlockNumber !== forkBlockNumberConfig ||
-        forkIgnoreUnknownTxType !== forkIgnoreUnknownTxTypeConfig
+        forkBlockNumber !== forkBlockNumberConfig
       ) {
         await provider.request({
           method: "hardhat_reset",
@@ -164,8 +162,7 @@ subtask(TASK_NODE_GET_PROVIDER)
             {
               forking: {
                 jsonRpcUrl: forkUrl,
-                blockNumber: forkBlockNumber,
-                ignoreUnknownTxType: forkIgnoreUnknownTxType,
+                blockNumber: forkBlockNumber
               },
             },
           ],
