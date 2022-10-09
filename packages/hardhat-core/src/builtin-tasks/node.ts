@@ -1,4 +1,4 @@
-import type EthereumjsUtilT from "ethereumjs-util";
+import type EthereumjsUtilT from "@nomicfoundation/ethereumjs-util";
 
 import chalk from "chalk";
 import debug from "debug";
@@ -51,8 +51,8 @@ function logHardhatNetworkAccounts(networkConfig: HardhatNetworkConfig) {
     !Array.isArray(networkConfig.accounts) &&
     networkConfig.accounts.mnemonic === HARDHAT_NETWORK_MNEMONIC;
 
-  const { BN, bufferToHex, privateToAddress, toBuffer, toChecksumAddress } =
-    require("ethereumjs-util") as typeof EthereumjsUtilT;
+  const { bufferToHex, privateToAddress, toBuffer, toChecksumAddress } =
+    require("@nomicfoundation/ethereumjs-util") as typeof EthereumjsUtilT;
 
   console.log("Accounts");
   console.log("========");
@@ -72,9 +72,7 @@ function logHardhatNetworkAccounts(networkConfig: HardhatNetworkConfig) {
       bufferToHex(privateToAddress(toBuffer(account.privateKey)))
     );
 
-    const balance = new BN(account.balance)
-      .div(new BN(10).pow(new BN(18)))
-      .toString(10);
+    const balance = (BigInt(account.balance) / 10n ** 18n).toString(10);
 
     let entry = `Account #${index}: ${address} (${balance} ETH)`;
 
@@ -97,14 +95,22 @@ Private Key: ${privateKey}`;
 subtask(TASK_NODE_GET_PROVIDER)
   .addOptionalParam("forkUrl", undefined, undefined, types.string)
   .addOptionalParam("forkBlockNumber", undefined, undefined, types.int)
+  .addOptionalParam(
+    "forkIgnoreUnknownTxType",
+    undefined,
+    undefined,
+    types.boolean
+  )
   .setAction(
     async (
       {
         forkBlockNumber: forkBlockNumberParam,
         forkUrl: forkUrlParam,
+        forkIgnoreUnknownTxType: forkIgnoreUnknownTxTypeParam,
       }: {
         forkBlockNumber?: number;
         forkUrl?: string;
+        forkIgnoreUnknownTxType?: boolean;
       },
       { artifacts, config, network, userConfig }
     ): Promise<EthereumProvider> => {
@@ -126,9 +132,13 @@ subtask(TASK_NODE_GET_PROVIDER)
 
       const forkUrlConfig = hardhatNetworkConfig.forking?.url;
       const forkBlockNumberConfig = hardhatNetworkConfig.forking?.blockNumber;
+      const forkIgnoreUnknownTxTypeConfig =
+        hardhatNetworkConfig.forking?.ignoreUnknownTxType;
 
       const forkUrl = forkUrlParam ?? forkUrlConfig;
       const forkBlockNumber = forkBlockNumberParam ?? forkBlockNumberConfig;
+      const forkIgnoreUnknownTxType =
+        forkIgnoreUnknownTxTypeParam ?? forkIgnoreUnknownTxTypeConfig;
 
       // we throw an error if the user specified a forkBlockNumber but not a
       // forkUrl
@@ -151,6 +161,7 @@ subtask(TASK_NODE_GET_PROVIDER)
               forking: {
                 jsonRpcUrl: forkUrl,
                 blockNumber: forkBlockNumber,
+                ignoreUnknownTxType: forkIgnoreUnknownTxType,
               },
             },
           ],
@@ -275,6 +286,12 @@ task(TASK_NODE, "Starts a JSON-RPC server on top of Hardhat Network")
     undefined,
     types.int
   )
+  .addOptionalParam(
+    "forkIgnoreUnknownTxType",
+    "To ignore unknown transaction types",
+    false,
+    types.boolean
+  )
   .setAction(
     async (
       {
@@ -282,11 +299,13 @@ task(TASK_NODE, "Starts a JSON-RPC server on top of Hardhat Network")
         fork: forkUrl,
         hostname: hostnameParam,
         port,
+        forkIgnoreUnknownTxType,
       }: {
         forkBlockNumber?: number;
         fork?: string;
         hostname?: string;
         port: number;
+        forkIgnoreUnknownTxType?: boolean;
       },
       { config, hardhatArguments, network, run }
     ) => {
@@ -304,6 +323,7 @@ task(TASK_NODE, "Starts a JSON-RPC server on top of Hardhat Network")
         const provider: EthereumProvider = await run(TASK_NODE_GET_PROVIDER, {
           forkBlockNumber,
           forkUrl,
+          forkIgnoreUnknownTxType,
         });
 
         // the default hostname is "127.0.0.1" unless we are inside a docker
@@ -324,6 +344,7 @@ task(TASK_NODE, "Starts a JSON-RPC server on top of Hardhat Network")
           hostname,
           port,
           provider,
+          forkIgnoreUnknownTxType,
         });
 
         await run(TASK_NODE_SERVER_CREATED, {
